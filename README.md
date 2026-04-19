@@ -1,88 +1,32 @@
-# English Finance System
+# Atualização do frontend - Fluent Finance
 
-Sistema web completo em **React + Vite + Supabase** para controle financeiro de uma escola de inglês.
+## Onde inserir
 
-## Funcionalidades
+### 1. No seu repositório GitHub
+Substitua estes arquivos/pastas:
+- `src/` inteiro
+- `vite.config.js`
+- `package.json`
+- `.env.example`
 
-- Login e cadastro com Supabase Auth
-- Cadastro de alunos
-- Cadastro e controle de mensalidades
-- Registro de entradas e saídas
-- Dashboard com cards e gráficos
-- Links e observações extras
-- CRUD completo
-- Filtros por mês, aluno e status
-- Interface responsiva, colorida e em português do Brasil
-- Pronto para GitHub Pages usando `HashRouter`
+### 2. No Supabase
+Rode o arquivo:
+- `supabase-rls-fix.sql`
 
-## Tecnologias
+## Passo a passo
+1. Baixe este pacote.
+2. Apague a pasta `src` atual do seu projeto.
+3. Cole a nova pasta `src` no lugar.
+4. Substitua `vite.config.js` e `package.json`.
+5. Rode o SQL `supabase-rls-fix.sql` no Supabase SQL Editor.
+6. No terminal, rode:
+   - `npm install`
+   - `npm run build`
+7. Faça commit e push.
 
-- React
-- Vite
-- Tailwind CSS
-- React Router
-- Recharts
-- Supabase
-- react-hot-toast
-- lucide-react
-
-## Como usar
-
-### 1. Instale as dependências
-
-```bash
-npm install
-```
-
-### 2. Configure as variáveis de ambiente
-
-Copie `.env.example` para `.env` e preencha:
-
-```env
-VITE_SUPABASE_URL=https://seu-projeto.supabase.co
-VITE_SUPABASE_ANON_KEY=sua-chave-anon-aqui
-```
-
-### 3. Crie as tabelas no Supabase
-
-Execute o arquivo `supabase-schema.sql` no SQL Editor do Supabase.
-
-### 4. Rode localmente
-
-```bash
-npm run dev
-```
-
-### 5. Gere build
-
-```bash
-npm run build
-```
-
-## Deploy no GitHub Pages
-
-Como o projeto usa `HashRouter` e `base: './'`, ele já fica mais amigável para deploy estático no GitHub Pages.
-
-Fluxo simples:
-
-1. Suba o projeto para o GitHub
-2. Rode `npm install`
-3. Rode `npm run build`
-4. Publique a pasta `dist/` no GitHub Pages ou configure GitHub Actions
-
-## Estrutura principal
-
-```text
-src/
-  components/
-  contexts/
-  hooks/
-  layouts/
-  lib/
-  pages/
-  utils/
-```
-
-## Observação importante sobre RLS
-
-As tabelas usam **Row Level Security** para que cada usuário veja e edite apenas os próprios dados.
+## O que esta atualização corrige
+- envia `user_id` em todos os inserts/updates
+- usa valores corretos no frontend: `ativo`, `inativo`, `entrada`, `saida`, `pago`, `pendente`, `atrasado`
+- corrige campos de data com `type=date`
+- melhora dashboard e telas
+- mantém compatibilidade com GitHub Pages
