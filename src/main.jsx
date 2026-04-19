@@ -1,27 +1,19 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
-import { Toaster } from 'react-hot-toast'
 import App from './App'
+import './styles.css'
 import { AuthProvider } from './contexts/AuthContext'
-import './index.css'
+import { ToastProvider } from './contexts/ToastContext'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <HashRouter>
-      <AuthProvider>
-        <App />
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            style: {
-              borderRadius: '16px',
-              background: '#0f172a',
-              color: '#fff',
-            },
-          }}
-        />
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </ToastProvider>
     </HashRouter>
   </React.StrictMode>,
 )
