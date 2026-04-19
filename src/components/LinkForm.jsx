@@ -1,49 +1,73 @@
-import { useEffect, useState } from 'react'
-import { FormField, inputClassName } from './FormField'
+import { useState } from 'react'
+import Modal from './Modal'
+import { supabase } from '../lib/supabase'
+import { useToast } from '../contexts/ToastContext'
 
-const initialState = {
+const emptyForm = {
   title: '',
   url: '',
   description: '',
 }
 
-export default function LinkForm({ initialValues, onSubmit, submitting }) {
-  const [form, setForm] = useState(initialState)
+export default function LinkForm({ open, onClose, current, onSaved }) {
+  const [form, setForm] = useState(current || emptyForm)
+  const [loading, setLoading] = useState(false)
+  const { showToast } = useToast()
 
-  useEffect(() => {
-    if (initialValues) {
-      setForm({ ...initialState, ...initialValues })
-    } else {
-      setForm(initialState)
+  const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Usuário não autenticado.')
+
+      const payload = {
+        user_id: user.id,
+        title: form.title.trim(),
+        url: form.url.trim(),
+        description: form.description || null,
+      }
+
+      const query = current?.id
+        ? supabase.from('useful_links').update(payload).eq('id', current.id)
+        : supabase.from('useful_links').insert([payload])
+
+      const { error } = await query
+      if (error) throw error
+
+      showToast(current?.id ? 'Link atualizado com sucesso.' : 'Link salvo com sucesso.')
+      onSaved()
+      onClose()
+    } catch (error) {
+      console.error(error)
+      showToast(error.message || 'Não foi possível salvar.', 'error')
+    } finally {
+      setLoading(false)
     }
-  }, [initialValues])
-
-  const handleChange = (event) => {
-    const { name, value } = event.target
-    setForm((previous) => ({ ...previous, [name]: value }))
-  }
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    await onSubmit(form)
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4">
-      <FormField label="Título">
-        <input className={inputClassName()} name="title" value={form.title} onChange={handleChange} required />
-      </FormField>
-      <FormField label="URL">
-        <input className={inputClassName()} type="url" name="url" value={form.url} onChange={handleChange} required />
-      </FormField>
-      <FormField label="Descrição">
-        <textarea className={inputClassName()} rows="4" name="description" value={form.description} onChange={handleChange} />
-      </FormField>
-      <div className="flex justify-end">
-        <button type="submit" disabled={submitting} className="rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60">
-          {submitting ? 'Salvando...' : 'Salvar link'}
-        </button>
-      </div>
-    </form>
+    <Modal open={open} title={current?.id ? 'Editar link' : 'Novo link'} onClose={onClose}>
+      <form onSubmit={handleSubmit} className="grid gap-5">
+        <div>
+          <label className="label">Título</label>
+          <input className="input" value={form.title} onChange={(e) => update('title', e.target.value)} required />
+        </div>
+        <div>
+          <label className="label">URL</label>
+          <input className="input" type="url" value={form.url} onChange={(e) => update('url', e.target.value)} required />
+        </div>
+        <div>
+          <label className="label">Descrição</label>
+          <textarea className="input min-h-32" value={form.description} onChange={(e) => update('description', e.target.value)} />
+        </div>
+        <div className="flex justify-end gap-3">
+          <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button className="btn-primary" disabled={loading}>{loading ? 'Salvando...' : 'Salvar link'}</button>
+        </div>
+      </form>
+    </Modal>
   )
 }

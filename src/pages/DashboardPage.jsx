@@ -1,76 +1,137 @@
-import { DollarSign, Wallet, TrendingDown, TrendingUp, Users } from 'lucide-react'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { BarChart, Bar, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell } from 'recharts'
+import { supabase } from '../lib/supabase'
 import PageHeader from '../components/PageHeader'
-import StatCard from '../components/StatCard'
-import { useCrud } from '../hooks/useCrud'
-import { calculateDashboardMetrics, getMonthlyOverview, getStatusChart } from '../utils/dashboard'
-import { formatCurrency, formatDate, getCurrentMonth } from '../utils/formatters'
-import { CashflowChart, EntryExitChart, StatusPieChart } from '../components/DashboardCharts'
-import CardSection from '../components/CardSection'
+import StatsCard from '../components/StatsCard'
+import { currency, monthKey, paymentStatus } from '../lib/utils'
 
 export default function DashboardPage() {
-  const students = useCrud('students')
-  const payments = useCrud('payments', '*, students(name)', 'due_date', false)
-  const entries = useCrud('financial_entries', '*', 'entry_date', false)
-  const monthFilter = getCurrentMonth()
+  const [students, setStudents] = useState([])
+  const [payments, setPayments] = useState([])
+  const [entries, setEntries] = useState([])
 
-  const metrics = useMemo(
-    () => calculateDashboardMetrics(payments.data, entries.data, students.data, monthFilter),
-    [payments.data, entries.data, students.data, monthFilter],
-  )
+  useEffect(() => {
+    Promise.all([
+      supabase.from('students').select('*'),
+      supabase.from('payments').select('*'),
+      supabase.from('financial_entries').select('*'),
+    ]).then(([studentRes, paymentRes, entryRes]) => {
+      setStudents(studentRes.data || [])
+      setPayments(paymentRes.data || [])
+      setEntries(entryRes.data || [])
+    })
+  }, [])
 
-  const monthlyOverview = useMemo(() => getMonthlyOverview(payments.data, entries.data), [payments.data, entries.data])
-  const statusData = useMemo(() => getStatusChart(payments.data, monthFilter), [payments.data, monthFilter])
+  const metrics = useMemo(() => {
+    const received = payments.filter((p) => p.status === 'pago').reduce((sum, item) => sum + Number(item.amount || 0), 0)
+    const pending = payments.filter((p) => paymentStatus(p.status, p.due_date, p.payment_date) !== 'pago').reduce((sum, item) => sum + Number(item.amount || 0), 0)
+    const income = entries.filter((e) => e.type === 'entrada').reduce((sum, item) => sum + Number(item.amount || 0), 0)
+    const expenses = entries.filter((e) => e.type === 'saida').reduce((sum, item) => sum + Number(item.amount || 0), 0)
+    return {
+      received,
+      pending,
+      expenses,
+      balance: received + income - expenses,
+      activeStudents: students.filter((student) => student.status === 'ativo').length,
+    }
+  }, [students, payments, entries])
 
-  const upcomingPayments = payments.data
-    .filter((payment) => payment.status !== 'pago')
-    .slice(0, 6)
+  const monthlyData = useMemo(() => {
+    const map = new Map()
+    const pushMonth = (key) => {
+      if (!map.has(key)) map.set(key, { month: key, entradas: 0, saidas: 0, recebimentos: 0 })
+      return map.get(key)
+    }
+
+    payments.forEach((item) => {
+      const row = pushMonth(monthKey(item.due_date))
+      if (item.status === 'pago') row.recebimentos += Number(item.amount || 0)
+    })
+
+    entries.forEach((item) => {
+      const row = pushMonth(monthKey(item.entry_date))
+      if (item.type === 'entrada') row.entradas += Number(item.amount || 0)
+      if (item.type === 'saida') row.saidas += Number(item.amount || 0)
+    })
+
+    return Array.from(map.values()).sort((a, b) => a.month.localeCompare(b.month)).slice(-6)
+  }, [payments, entries])
+
+  const paymentPie = useMemo(() => {
+    const paid = payments.filter((p) => p.status === 'pago').length
+    const pending = payments.filter((p) => paymentStatus(p.status, p.due_date, p.payment_date) === 'pendente').length
+    const overdue = payments.filter((p) => paymentStatus(p.status, p.due_date, p.payment_date) === 'atrasado').length
+    return [
+      { name: 'Pago', value: paid },
+      { name: 'Pendente', value: pending },
+      { name: 'Atrasado', value: overdue },
+    ]
+  }, [payments])
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Dashboard financeiro"
-        description="Acompanhe recebimentos, pendências, despesas e o desempenho financeiro da sua escola em um só lugar."
-      />
+    <>
+      <PageHeader title="Dashboard financeiro" subtitle="Tenha visão rápida do caixa, da inadimplência e da saúde financeira da escola." />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard title="Recebido no mês" value={formatCurrency(metrics.totalReceived)} icon={DollarSign} accent="from-emerald-500 to-green-600" />
-        <StatCard title="Pendente no mês" value={formatCurrency(metrics.totalPending)} icon={Wallet} accent="from-amber-500 to-orange-600" />
-        <StatCard title="Despesas no mês" value={formatCurrency(metrics.totalExpenses)} icon={TrendingDown} accent="from-rose-500 to-red-600" />
-        <StatCard title="Lucro líquido" value={formatCurrency(metrics.netProfit)} icon={TrendingUp} accent="from-sky-500 to-indigo-600" />
-        <StatCard title="Alunos ativos" value={metrics.activeStudents} icon={Users} accent="from-violet-500 to-purple-600" />
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <StatsCard title="Recebido" value={currency(metrics.received)} />
+        <StatsCard title="Pendente" value={currency(metrics.pending)} />
+        <StatsCard title="Despesas" value={currency(metrics.expenses)} />
+        <StatsCard title="Lucro líquido" value={currency(metrics.balance)} />
+        <StatsCard title="Alunos ativos" value={String(metrics.activeStudents)} />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <CashflowChart data={monthlyOverview} />
-        <EntryExitChart data={monthlyOverview} />
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <StatusPieChart data={statusData} />
-        <CardSection title="Próximos vencimentos" subtitle="Mensalidades ainda não quitadas.">
-          <div className="space-y-3">
-            {upcomingPayments.length === 0 ? (
-              <p className="text-sm text-slate-500">Nenhuma mensalidade pendente no momento.</p>
-            ) : (
-              upcomingPayments.map((item) => (
-                <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-bold text-slate-900">{item.students?.name || 'Aluno sem nome'}</p>
-                    <p className="text-sm text-slate-500">{item.competence} • Vence em {formatDate(item.due_date)}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${item.status === 'atrasado' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
-                      {item.status}
-                    </span>
-                    <span className="text-sm font-black text-slate-900">{formatCurrency(item.amount)}</span>
-                  </div>
-                </div>
-              ))
-            )}
+      <div className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
+        <div className="card p-5">
+          <h2 className="mb-4 text-xl font-bold text-slate-800">Fluxo por mês</h2>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={monthlyData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip formatter={(value) => currency(value)} />
+                <Legend />
+                <Line type="monotone" dataKey="recebimentos" stroke="#4f46e5" strokeWidth={3} />
+                <Line type="monotone" dataKey="entradas" stroke="#16a34a" strokeWidth={3} />
+                <Line type="monotone" dataKey="saidas" stroke="#ef4444" strokeWidth={3} />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
-        </CardSection>
+        </div>
+
+        <div className="card p-5">
+          <h2 className="mb-4 text-xl font-bold text-slate-800">Status das mensalidades</h2>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={paymentPie} dataKey="value" nameKey="name" outerRadius={110} label>
+                  <Cell fill="#10b981" />
+                  <Cell fill="#f59e0b" />
+                  <Cell fill="#ef4444" />
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
-    </div>
+
+      <div className="card mt-6 p-5">
+        <h2 className="mb-4 text-xl font-bold text-slate-800">Resumo comparativo</h2>
+        <div className="h-80">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={monthlyData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip formatter={(value) => currency(value)} />
+              <Legend />
+              <Bar dataKey="recebimentos" fill="#4f46e5" />
+              <Bar dataKey="saidas" fill="#ef4444" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </>
   )
 }

@@ -1,78 +1,107 @@
-import { useEffect, useState } from 'react'
-import { FormField, inputClassName } from './FormField'
+import { useState } from 'react'
+import Modal from './Modal'
+import { supabase } from '../lib/supabase'
+import { todayIso } from '../lib/utils'
+import { useToast } from '../contexts/ToastContext'
 
-const initialState = {
+const emptyForm = {
   name: '',
   phone: '',
   email: '',
-  enrollment_date: new Date().toISOString().slice(0, 10),
+  enrollment_date: todayIso(),
   monthly_fee: '',
-  due_day: 5,
+  due_day: '10',
   status: 'ativo',
   notes: '',
 }
 
-export default function StudentForm({ initialValues, onSubmit, submitting }) {
-  const [form, setForm] = useState(initialState)
+export default function StudentForm({ open, onClose, current, onSaved }) {
+  const [form, setForm] = useState(current || emptyForm)
+  const [loading, setLoading] = useState(false)
+  const { showToast } = useToast()
 
-  useEffect(() => {
-    if (initialValues) {
-      setForm({ ...initialState, ...initialValues })
-    } else {
-      setForm(initialState)
+  const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Usuário não autenticado.')
+
+      const payload = {
+        user_id: user.id,
+        name: form.name.trim(),
+        phone: form.phone || null,
+        email: form.email || null,
+        enrollment_date: form.enrollment_date,
+        monthly_fee: Number(form.monthly_fee || 0),
+        due_day: Number(form.due_day || 1),
+        status: form.status,
+        notes: form.notes || null,
+      }
+
+      const query = current?.id
+        ? supabase.from('students').update(payload).eq('id', current.id)
+        : supabase.from('students').insert([payload])
+
+      const { error } = await query
+      if (error) throw error
+
+      showToast(current?.id ? 'Aluno atualizado com sucesso.' : 'Aluno salvo com sucesso.')
+      onSaved()
+      onClose()
+    } catch (error) {
+      console.error(error)
+      showToast(error.message || 'Não foi possível salvar.', 'error')
+    } finally {
+      setLoading(false)
     }
-  }, [initialValues])
-
-  const handleChange = (event) => {
-    const { name, value } = event.target
-    setForm((previous) => ({ ...previous, [name]: value }))
-  }
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    await onSubmit({
-      ...form,
-      monthly_fee: Number(form.monthly_fee || 0),
-      due_day: Number(form.due_day || 1),
-    })
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
-      <FormField label="Nome do aluno">
-        <input className={inputClassName()} name="name" value={form.name} onChange={handleChange} required />
-      </FormField>
-      <FormField label="Telefone">
-        <input className={inputClassName()} name="phone" value={form.phone} onChange={handleChange} />
-      </FormField>
-      <FormField label="E-mail">
-        <input className={inputClassName()} type="email" name="email" value={form.email} onChange={handleChange} />
-      </FormField>
-      <FormField label="Data de matrícula">
-        <input className={inputClassName()} type="date" name="enrollment_date" value={form.enrollment_date} onChange={handleChange} />
-      </FormField>
-      <FormField label="Valor da mensalidade">
-        <input className={inputClassName()} type="number" min="0" step="0.01" name="monthly_fee" value={form.monthly_fee} onChange={handleChange} required />
-      </FormField>
-      <FormField label="Dia do vencimento">
-        <input className={inputClassName()} type="number" min="1" max="31" name="due_day" value={form.due_day} onChange={handleChange} required />
-      </FormField>
-      <FormField label="Status">
-        <select className={inputClassName()} name="status" value={form.status} onChange={handleChange}>
-          <option value="ativo">Ativo</option>
-          <option value="inativo">Inativo</option>
-        </select>
-      </FormField>
-      <div className="sm:col-span-2">
-        <FormField label="Observações">
-          <textarea className={inputClassName()} rows="4" name="notes" value={form.notes} onChange={handleChange} />
-        </FormField>
-      </div>
-      <div className="sm:col-span-2 flex justify-end">
-        <button type="submit" disabled={submitting} className="rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60">
-          {submitting ? 'Salvando...' : 'Salvar aluno'}
-        </button>
-      </div>
-    </form>
+    <Modal open={open} title={current?.id ? 'Editar aluno' : 'Novo aluno'} onClose={onClose}>
+      <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
+        <div>
+          <label className="label">Nome do aluno</label>
+          <input className="input" value={form.name} onChange={(e) => update('name', e.target.value)} required />
+        </div>
+        <div>
+          <label className="label">Telefone</label>
+          <input className="input" value={form.phone} onChange={(e) => update('phone', e.target.value)} />
+        </div>
+        <div>
+          <label className="label">E-mail</label>
+          <input className="input" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Data de matrícula</label>
+          <input className="input" type="date" value={form.enrollment_date} onChange={(e) => update('enrollment_date', e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Valor da mensalidade</label>
+          <input className="input" type="number" min="0" step="0.01" value={form.monthly_fee} onChange={(e) => update('monthly_fee', e.target.value)} required />
+        </div>
+        <div>
+          <label className="label">Dia do vencimento</label>
+          <input className="input" type="number" min="1" max="31" value={form.due_day} onChange={(e) => update('due_day', e.target.value)} required />
+        </div>
+        <div>
+          <label className="label">Status</label>
+          <select className="input" value={form.status} onChange={(e) => update('status', e.target.value)}>
+            <option value="ativo">Ativo</option>
+            <option value="inativo">Inativo</option>
+          </select>
+        </div>
+        <div className="md:col-span-2">
+          <label className="label">Observações</label>
+          <textarea className="input min-h-32" value={form.notes} onChange={(e) => update('notes', e.target.value)} />
+        </div>
+        <div className="md:col-span-2 flex justify-end gap-3">
+          <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button className="btn-primary" disabled={loading}>{loading ? 'Salvando...' : 'Salvar aluno'}</button>
+        </div>
+      </form>
+    </Modal>
   )
 }

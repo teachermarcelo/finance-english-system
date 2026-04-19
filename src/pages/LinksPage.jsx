@@ -1,88 +1,64 @@
+import { useEffect, useState } from 'react'
 import { ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
-import toast from 'react-hot-toast'
-import CardSection from '../components/CardSection'
-import EmptyState from '../components/EmptyState'
-import LinkForm from '../components/LinkForm'
-import Modal from '../components/Modal'
+import { supabase } from '../lib/supabase'
 import PageHeader from '../components/PageHeader'
-import { useCrud } from '../hooks/useCrud'
+import LinkForm from '../components/LinkForm'
+import ConfirmDialog from '../components/ConfirmDialog'
+import { useToast } from '../contexts/ToastContext'
 
 export default function LinksPage() {
-  const links = useCrud('useful_links')
-  const [open, setOpen] = useState(false)
-  const [editing, setEditing] = useState(null)
-  const [submitting, setSubmitting] = useState(false)
+  const [links, setLinks] = useState([])
+  const [openForm, setOpenForm] = useState(false)
+  const [selected, setSelected] = useState(null)
+  const [removeId, setRemoveId] = useState(null)
+  const { showToast } = useToast()
 
-  const handleSubmit = async (values) => {
-    setSubmitting(true)
-    try {
-      if (editing) {
-        await links.updateRow(editing.id, values, 'Link atualizado com sucesso!')
-      } else {
-        await links.insertRow(values, 'Link salvo com sucesso!')
-      }
-      setOpen(false)
-      setEditing(null)
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setSubmitting(false)
-    }
+  const loadLinks = async () => {
+    const { data } = await supabase.from('useful_links').select('*').order('created_at', { ascending: false })
+    setLinks(data || [])
   }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Deseja realmente excluir este link?')) return
-    try {
-      await links.deleteRow(id, 'Link removido com sucesso!')
-    } catch (error) {
-      toast.error('Erro ao remover link.')
-    }
+  useEffect(() => { loadLinks() }, [])
+
+  const handleDelete = async () => {
+    const { error } = await supabase.from('useful_links').delete().eq('id', removeId)
+    if (error) return showToast(error.message, 'error')
+    showToast('Link excluído com sucesso.')
+    setRemoveId(null)
+    loadLinks()
   }
 
   return (
-    <div className="space-y-6">
+    <>
       <PageHeader
-        title="Links e observações extras"
-        description="Guarde links úteis, materiais, grupos, páginas de cobrança e anotações importantes em um só lugar."
-        action={
-          <button onClick={() => { setEditing(null); setOpen(true) }} className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-indigo-700 shadow-md transition hover:scale-[1.02]">
-            <Plus className="h-4 w-4" /> Novo link
-          </button>
-        }
+        title="Links úteis"
+        subtitle="Guarde links de reuniões, materiais, pagamentos e páginas importantes."
+        action={<button className="btn-primary" onClick={() => { setSelected(null); setOpenForm(true) }}><Plus size={18} /> Novo link</button>}
       />
 
-      <CardSection title="Links salvos" subtitle="Use esta área para campos extras personalizáveis e referências rápidas.">
-        {links.loading ? (
-          <p className="text-sm text-slate-500">Carregando links...</p>
-        ) : links.data.length === 0 ? (
-          <EmptyState title="Nenhum link salvo" description="Adicione grupos, materiais, cobranças ou observações com URL." />
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {links.data.map((link) => (
-              <div key={link.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-900">{link.title}</h3>
-                    <p className="mt-2 text-sm text-slate-500">{link.description || 'Sem descrição adicional.'}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => { setEditing(link); setOpen(true) }} className="rounded-2xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-100"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => handleDelete(link.id)} className="rounded-2xl border border-rose-200 p-2 text-rose-600 transition hover:bg-rose-50"><Trash2 className="h-4 w-4" /></button>
-                  </div>
-                </div>
-                <a href={link.url} target="_blank" rel="noreferrer" className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100">
-                  <ExternalLink className="h-4 w-4" /> Abrir link
-                </a>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {links.map((item) => (
+          <div className="card p-5" key={item.id}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">{item.title}</h3>
+                <p className="mt-2 text-sm text-slate-500">{item.description || 'Sem descrição'}</p>
               </div>
-            ))}
+              <div className="flex gap-2">
+                <button className="btn-secondary p-3" onClick={() => { setSelected(item); setOpenForm(true) }}><Pencil size={16} /></button>
+                <button className="btn-secondary p-3" onClick={() => setRemoveId(item.id)}><Trash2 size={16} /></button>
+              </div>
+            </div>
+            <a href={item.url} target="_blank" rel="noreferrer" className="mt-4 flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+              Abrir link <ExternalLink size={16} />
+            </a>
           </div>
-        )}
-      </CardSection>
+        ))}
+        {!links.length && <div className="card p-10 text-center text-slate-500">Nenhum link cadastrado ainda.</div>}
+      </div>
 
-      <Modal open={open} title={editing ? 'Editar link' : 'Novo link'} onClose={() => setOpen(false)}>
-        <LinkForm initialValues={editing} onSubmit={handleSubmit} submitting={submitting} />
-      </Modal>
-    </div>
+      <LinkForm key={selected?.id || 'new'} open={openForm} onClose={() => setOpenForm(false)} current={selected} onSaved={loadLinks} />
+      <ConfirmDialog open={!!removeId} message="Tem certeza que deseja excluir este link?" onCancel={() => setRemoveId(null)} onConfirm={handleDelete} />
+    </>
   )
 }
