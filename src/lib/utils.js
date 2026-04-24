@@ -8,7 +8,6 @@ export const formatDate = (date) => {
 }
 
 export const todayIso = () => new Date().toISOString().slice(0, 10)
-
 export const monthKey = (date) => (date || '').slice(0, 7)
 
 export const statusBadgeClass = (status) => {
@@ -22,6 +21,29 @@ export const statusBadgeClass = (status) => {
     saida: 'bg-rose-100 text-rose-700',
   }
   return map[status] || 'bg-slate-100 text-slate-700'
+}
+
+// 🎨 Cores específicas para exibição de VALORES MONETÁRIOS
+export const getValueColor = (type, status = null) => {
+  if (type === 'entrada') return 'text-emerald-600 font-semibold'
+  if (type === 'saida') return 'text-rose-600 font-semibold'
+  if (status === 'pago') return 'text-emerald-600 font-semibold'
+  if (status === 'pendente') return 'text-amber-600 font-semibold'
+  if (status === 'atrasado') return 'text-red-600 font-semibold'
+  return 'text-slate-700'
+}
+
+// 💰 Soma centralizada: mensalidades pagas + todas as outras entradas financeiras
+export const calculateTotalRevenue = (payments = [], financialEntries = []) => {
+  const paidPayments = payments
+    .filter(p => p.status === 'pago')
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+
+  const otherIncome = financialEntries
+    .filter(e => e.type === 'entrada')
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+
+  return paidPayments + otherIncome
 }
 
 export const paymentStatus = (status, dueDate, paymentDate) => {
